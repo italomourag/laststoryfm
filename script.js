@@ -97,7 +97,7 @@ document.getElementById('generate').addEventListener('click', () => {
                 const imgWidth = collageWidth / cols * 0.8;  // Reduzido para 80%
                 const imgHeight = collageHeight / rows * 0.8;  // Reduzido para 80%
 
-                // Criar um canvas no funddo da colagem
+                // Criar um canvas no fundo da colagem
                 const backgroundCanvas = document.createElement('canvas');
                 backgroundCanvas.width = 1080;  // Largura do fundo
                 backgroundCanvas.height = 1920;  // Altura do fundo
