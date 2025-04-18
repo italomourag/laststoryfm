@@ -1,5 +1,4 @@
 const apiKey = '3665028fedb6ae2920627f6a08e42a4b'; // Sua chave API
-const apiKeyFanArt = '45b0cabd4dd3787ce87809d3a0be654d';
 const canvas = document.getElementById('collageCanvas');
 const ctx = canvas.getContext('2d');
 const collageDiv = document.getElementById('collage');
