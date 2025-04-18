@@ -1,8 +1,29 @@
 const apiKey = '3665028fedb6ae2920627f6a08e42a4b'; // Sua chave API
+const apiKeyFanArt = '45b0cabd4dd3787ce87809d3a0be654d';
 const canvas = document.getElementById('collageCanvas');
 const ctx = canvas.getContext('2d');
 const collageDiv = document.getElementById('collage');
 const downloadBtn = document.getElementById('download');
+
+function getTypeMethod(type) {
+    const methodMap = {
+        album: 'user.gettopalbums',
+        artist: 'user.gettopartists',
+        track: 'user.gettoptracks'
+    };
+
+    return methodMap[type] ?? 'user.gettopartists';
+}
+
+function getTypeResponseType(type) {
+    const typeMap = {
+        album: 'album',
+        artist: 'artist',
+        track: 'track'
+    };
+
+    return typeMap[type] ?? 'artist';
+}
 
 // Cálculo médio de cor da imagem
 function getAverageColor(image) {
@@ -43,6 +64,7 @@ function isColorDark(color) {
 document.getElementById('generate').addEventListener('click', () => {
     const username = document.getElementById('username').value;
     const period = document.getElementById('period').value;
+    const type = document.getElementById('type').value;
 
     if (!username) {
         alert('Por favor, insira o nome do usuário do Last.fm.');
@@ -56,8 +78,11 @@ document.getElementById('generate').addEventListener('click', () => {
         'overall': 'Mais ouvidos de todos os tempos'
     }[period];
 
+    const typeMethod = getTypeMethod(type);
+    console.log(`Método: ${typeMethod}, Usuário: ${username}, Período: ${period}`);
+
     // Requisição para a API do Last.fm
-    fetch(`https://ws.audioscrobbler.com/2.0/?method=user.gettopalbums&user=${username}&period=${period}&limit=6&api_key=${apiKey}&format=json`)
+    fetch(`https://ws.audioscrobbler.com/2.0/?method=${typeMethod}&user=${username}&period=${period}&limit=6&api_key=${apiKey}&format=json`)
         .then(response => response.json())
         .then(data => {
             if (data.error) {
@@ -66,25 +91,32 @@ document.getElementById('generate').addEventListener('click', () => {
                 return;
             }
 
-            const albums = data.topalbums.album;
+            const responseKeyMap = {
+                artist: ['topartists', 'artist'],
+                album: ['topalbums', 'album'],
+                track: ['toptracks', 'track']
+            };
+
+            const [mainKey, subKey] = responseKeyMap[type] ?? ['topartists', 'artist'];
+            const dataTypeResponse = data[mainKey]?.[subKey];
 
             // Limpar colagem anterior
             collageDiv.innerHTML = '';
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Processar cada álbum
-            const albumImages = [];
+            // Processar cada artista/álbum
+            const typeImages = [];
             const averageColors = [];
 
-            albums.forEach(album => {
+            dataTypeResponse.forEach(typeResponse => {
                 const img = new Image();
                 img.crossOrigin = "Anonymous";  // Define a política de CORS
-                img.src = album.image[3]['#text']; // Pegar a imagem grande do álbum
-                albumImages.push(img);
+                img.src = typeResponse.image[3]['#text']; // Pegar a imagem grande do artista/álbum
+                typeImages.push(img);
             });
 
             // Esperar que todas as imagens sejam carregadas
-            Promise.all(albumImages.map(img => new Promise((resolve) => {
+            Promise.all(typeImages.map(img => new Promise((resolve) => {
                 img.onload = () => {
                     averageColors.push(getAverageColor(img)); // Pega a cor média
                     resolve();
@@ -136,7 +168,7 @@ document.getElementById('generate').addEventListener('click', () => {
                 const xOffset = (canvas.width - totalWidth) / 2;  
                 const yOffset = (canvas.height - totalHeight) / 2 + 80;  
 
-                albumImages.forEach((img, index) => {
+                typeImages.forEach((img, index) => {
                     const x = xOffset + (index % cols) * imgWidth;
                     const y = yOffset + Math.floor(index / cols) * imgHeight;
                     ctx.drawImage(img, x, y, imgWidth, imgHeight);
