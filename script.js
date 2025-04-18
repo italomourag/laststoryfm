@@ -8,8 +8,7 @@ const downloadBtn = document.getElementById('download');
 function getTypeMethod(type) {
     const methodMap = {
         album: 'user.gettopalbums',
-        artist: 'user.gettopartists',
-        track: 'user.gettoptracks'
+        artist: 'user.gettopartists'
     };
 
     return methodMap[type] ?? 'user.gettopartists';
@@ -18,8 +17,7 @@ function getTypeMethod(type) {
 function getTypeResponseType(type) {
     const typeMap = {
         album: 'album',
-        artist: 'artist',
-        track: 'track'
+        artist: 'artist'
     };
 
     return typeMap[type] ?? 'artist';
@@ -81,10 +79,9 @@ document.getElementById('generate').addEventListener('click', () => {
     const typeMethod = getTypeMethod(type);
     console.log(`Método: ${typeMethod}, Usuário: ${username}, Período: ${period}`);
 
-    // Requisição para a API do Last.fm
     fetch(`https://ws.audioscrobbler.com/2.0/?method=${typeMethod}&user=${username}&period=${period}&limit=6&api_key=${apiKey}&format=json`)
         .then(response => response.json())
-        .then(data => {
+        .then(async data => {
             if (data.error) {
                 console.error('Erro na API:', data.message);
                 alert('Erro ao obter dados do Last.fm: ' + data.message);
@@ -93,127 +90,126 @@ document.getElementById('generate').addEventListener('click', () => {
 
             const responseKeyMap = {
                 artist: ['topartists', 'artist'],
-                album: ['topalbums', 'album'],
-                track: ['toptracks', 'track']
+                album: ['topalbums', 'album']
             };
 
             const [mainKey, subKey] = responseKeyMap[type] ?? ['topartists', 'artist'];
             const dataTypeResponse = data[mainKey]?.[subKey];
 
-            // Limpar colagem anterior
             collageDiv.innerHTML = '';
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Processar cada artista/álbum
             const typeImages = [];
             const averageColors = [];
 
-            dataTypeResponse.forEach(typeResponse => {
-                const img = new Image();
-                img.crossOrigin = "Anonymous";  // Define a política de CORS
-                img.src = typeResponse.image[3]['#text']; // Pegar a imagem grande do artista/álbum
+            // Função auxiliar para carregar imagem
+            const loadImage = (url) => {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous";
+                    img.src = url;
+                    img.onload = () => resolve(img);
+                    img.onerror = () => resolve(null);
+                });
+            };
+
+            let imagePromises = [];
+
+            if (type === 'album') {
+                imagePromises = dataTypeResponse.map(typeResponse => {
+                    const imageUrl = typeResponse.image[3]['#text'];
+                    return loadImage(imageUrl);
+                });
+            } else {
+                imagePromises = dataTypeResponse.map(async typeResponse => {
+                    const apiUrl = `http://3.133.145.248/artist-image.php?q=${encodeURIComponent(typeResponse.name)}`;
+                    try {
+                        const res = await fetch(apiUrl);
+                        const imageData = await res.json();
+                        const imageUrl = imageData.imagem || null;
+                        if (imageUrl) return await loadImage(imageUrl);
+                    } catch (e) {
+                        return null;
+                    }
+                });
+            }
+
+            const resolvedImages = (await Promise.all(imagePromises)).filter(img => img !== null);
+            resolvedImages.forEach(img => {
                 typeImages.push(img);
+                averageColors.push(getAverageColor(img));
             });
 
-            // Esperar que todas as imagens sejam carregadas
-            Promise.all(typeImages.map(img => new Promise((resolve) => {
-                img.onload = () => {
-                    averageColors.push(getAverageColor(img)); // Pega a cor média
-                    resolve();
-                };
-            }))).then(() => {
-                const collageWidth = 1100;  // Largura total da colagem
-                const collageHeight = 1600;  // Altura total da colagem
-                const cols = 2;
-                const rows = 3;
-                const imgWidth = collageWidth / cols * 0.8;  // Reduzido para 80%
-                const imgHeight = collageHeight / rows * 0.8;  // Reduzido para 80%
+            const collageWidth = 1100;
+            const collageHeight = 1600;
+            const cols = 2;
+            const rows = 3;
+            const imgWidth = collageWidth / cols * 0.8;
+            const imgHeight = collageHeight / rows * 0.8;
 
-                // Criar um canvas no fundo da colagem
-                const backgroundCanvas = document.createElement('canvas');
-                backgroundCanvas.width = 1080;  // Largura do fundo
-                backgroundCanvas.height = 1920;  // Altura do fundo
-                const bgCtx = backgroundCanvas.getContext('2d');
+            const backgroundCanvas = document.createElement('canvas');
+            backgroundCanvas.width = 1080;
+            backgroundCanvas.height = 1920;
+            const bgCtx = backgroundCanvas.getContext('2d');
 
-                // Preencher o canvas de fundo com um gradiante de cores médias
-                averageColors.forEach(color => {
-                    const gradient = bgCtx.createLinearGradient(0, 0, 0, backgroundCanvas.height);
-                    gradient.addColorStop(0, color);
-                    gradient.addColorStop(0.5, `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.5)`);  
-                    gradient.addColorStop(1, 'rgba(50, 50, 50, 0.5)');  
-                    bgCtx.fillStyle = gradient;
-                    bgCtx.fillRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
-                });
+            averageColors.forEach(color => {
+                const gradient = bgCtx.createLinearGradient(0, 0, 0, backgroundCanvas.height);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(0.5, `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.5)`);
+                gradient.addColorStop(1, 'rgba(50, 50, 50, 0.5)');
+                bgCtx.fillStyle = gradient;
+                bgCtx.fillRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+            });
 
-                // Criar um novo canvas para aplicar o blur
-                const blurredCanvas = document.createElement('canvas');
-                blurredCanvas.width = canvas.width;  // Manter a mesma largura
-                blurredCanvas.height = canvas.height;  // Manter a mesma altura
-                const blurredCtx = blurredCanvas.getContext('2d');
+            const blurredCanvas = document.createElement('canvas');
+            blurredCanvas.width = canvas.width;
+            blurredCanvas.height = canvas.height;
+            const blurredCtx = blurredCanvas.getContext('2d');
 
-                // Desenhar o fundo sólido primeiro
-                blurredCtx.drawImage(backgroundCanvas, 0, 0, blurredCanvas.width, blurredCanvas.height);
+            blurredCtx.drawImage(backgroundCanvas, 0, 0, blurredCanvas.width, blurredCanvas.height);
+            blurredCtx.filter = 'blur(10px)';
+            blurredCtx.drawImage(backgroundCanvas, 0, 0, blurredCanvas.width, blurredCanvas.height);
 
-                // Aplicar o blur na imagem de fundo
-                blurredCtx.filter = 'blur(10px)';  
-                blurredCtx.drawImage(backgroundCanvas, 0, 0, blurredCanvas.width, blurredCanvas.height);  
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(blurredCanvas, 0, 0);
 
-                // Desenhar o fundo borrado
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(blurredCanvas, 0, 0);  
+            const totalWidth = imgWidth * cols;
+            const totalHeight = imgHeight * rows;
+            const xOffset = (canvas.width - totalWidth) / 2;
+            const yOffset = (canvas.height - totalHeight) / 2 + 80;
 
-                // Desenhar as imagens dos álbuns sobre o fundo borrado
-                const totalWidth = imgWidth * cols;  
-                const totalHeight = imgHeight * rows;  
-                const xOffset = (canvas.width - totalWidth) / 2;  
-                const yOffset = (canvas.height - totalHeight) / 2 + 80;  
+            typeImages.forEach((img, index) => {
+                const x = xOffset + (index % cols) * imgWidth;
+                const y = yOffset + Math.floor(index / cols) * imgHeight;
+                ctx.drawImage(img, x, y, imgWidth, imgHeight);
+            });
 
-                typeImages.forEach((img, index) => {
-                    const x = xOffset + (index % cols) * imgWidth;
-                    const y = yOffset + Math.floor(index / cols) * imgHeight;
-                    ctx.drawImage(img, x, y, imgWidth, imgHeight);
-                });
+            const averageColor = getAverageColor(blurredCanvas);
+            const textColor = isColorDark(averageColor) ? 'white' : 'black';
 
-                // Adicionar possível texto acima do nome do usuário
-                const averageColor = getAverageColor(blurredCanvas); // Pegar a cor média do fundo
-                const textColor = isColorDark(averageColor) ? 'white' : 'black';
+            ctx.fillStyle = textColor;
+            ctx.font = 'bold 48px Roboto';
+            ctx.textAlign = 'center';
 
-                ctx.fillStyle = textColor;
-                ctx.font = 'bold 48px Roboto';
+            ctx.fillText(`/${username}`, canvas.width / 2, 310);
+            ctx.font = 'bold 28px "Roboto", sans-serif';
+            ctx.fillText(periodText, canvas.width / 2, 350);
+
+            function drawLastFmIcon() {
+                const iconSize = 48;
+                const iconX = canvas.width / 2;
+                const iconY = 250;
+                ctx.font = `${iconSize}px "Font Awesome 6 Brands"`;
                 ctx.textAlign = 'center';
+                ctx.fillText('\uf203', iconX, iconY);
+            }
+            drawLastFmIcon();
 
-                // Adicionar texto do nome do usuário
-                ctx.fillStyle = textColor;
-                ctx.font = 'bold 48px "Roboto", sans-serif';
-                ctx.textAlign = 'center'; 
-                ctx.fillText(`/${username}`, canvas.width / 2, 310);
-                ctx.font = 'bold 28px "Roboto", sans-serif';
-                ctx.fillText(periodText, canvas.width / 2, 350);
+            collageDiv.innerHTML = `<img src="${canvas.toDataURL('image/png')}" alt="Album Collage" />`;
 
-                // Ícone Last.fm
-                function drawLastFmIcon() {
-                    const iconSize = 48;
-                    const iconX = canvas.width / 2;
-                    const iconY = 250;
-
-                    // Carregar a fonte Font Awesome
-                    ctx.font = `${iconSize}px "Font Awesome 6 Brands"`;
-                    ctx.textAlign = 'center';
-
-                    // Desenhar o ícone usando o unicode
-                    ctx.fillText('\uf203', iconX, iconY);
-                }
-                // Chamar a função para desenhar o ícone Last.fm
-                drawLastFmIcon();
-
-                // Exibir a prévia da colagem
-                collageDiv.innerHTML = `<img src="${canvas.toDataURL('image/png')}" alt="Album Collage" />`;
-
-                // Atualizar o botão de Download
-                downloadBtn.href = canvas.toDataURL('image/png');
-                downloadBtn.download = 'Colagem.png';
-                downloadBtn.style.display = 'block';
-            });
+            downloadBtn.href = canvas.toDataURL('image/png');
+            downloadBtn.download = 'Colagem.png';
+            downloadBtn.style.display = 'block';
         })
         .catch(error => {
             console.error('Erro ao fazer a requisição:', error);
